@@ -1,34 +1,37 @@
-from typing import TypedDict, List
-from langgraph.graph import StateGraph
-from langchain_core.messages import HumanMessage
-from langchain_anthropic import ChatAnthropic
+from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_anthropic import ChatAnthropic
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
+IDEATOR_SYSTEM_PROMPT = """\
+You are an imaginative creative collaborator. Given a topic or brief, generate \
+a rich, compelling creative concept in 3-5 sentences. Be specific and original.
+"""
 
-
-class AgentState(TypedDict):
-    message : str
-    ideas : List[str]
+class CreativeState(TypedDict):
+    concept: str
+    feedback: str
+    verdict: str
 
 llm = ChatAnthropic(model="claude-haiku-4-5", max_tokens=512)
 
-def return_ideas(state : AgentState) -> AgentState:
-    response = llm.invoke([HumanMessage(content=state["message"])])
-    return {"ideas": [response.content]}
+def return_ideas(state: CreativeState) -> CreativeState:
+    response = llm.invoke([
+        SystemMessage(content=IDEATOR_SYSTEM_PROMPT),
+        HumanMessage(content=state["concept"])
+    ])
+    return {**state, "concept": response.content}
 
-graph = StateGraph(AgentState)
-graph.add_node("ideas", return_ideas)
-graph.add_edge(START, "ideas")
-graph.add_edge("ideas", END)
+graph = StateGraph(CreativeState)
+graph.add_node("ideator", return_ideas)
+graph.add_edge(START, "ideator")
+graph.add_edge("ideator", END)
 agent = graph.compile()
 
-user_input = input("Enter:")
-result = agent.invoke({"message": user_input, "ideas": []})
-print(result["ideas"])
-
-
-    
+user_input = input("Enter a creative brief: ")
+result = agent.invoke({"concept": user_input, "feedback": "", "verdict": ""})
+print(result["concept"])
