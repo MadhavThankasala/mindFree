@@ -16,6 +16,8 @@ class CreativeState(TypedDict):
     concept: str
     feedback: str
     verdict: str
+    original_brief: str
+    continuity_status: str
 
 llm = ChatAnthropic(model="claude-haiku-4-5", max_tokens=512)
 
@@ -33,5 +35,5 @@ graph.add_edge("ideator", END)
 agent = graph.compile()
 
 user_input = input("Enter a creative brief: ")
-result = agent.invoke({"concept": user_input, "feedback": "", "verdict": ""})
+result = agent.invoke({"concept": user_input, "feedback": "", "verdict": "", "original_brief": user_input, "continuity_status": ""})
 print(result["concept"])
