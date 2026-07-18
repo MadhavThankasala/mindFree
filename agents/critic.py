@@ -35,6 +35,8 @@ class CreativeState(TypedDict):
     concept: str
     feedback: str
     verdict: str
+    original_brief: str
+    continuity_status: str
 
 
 def get_critic_model():
