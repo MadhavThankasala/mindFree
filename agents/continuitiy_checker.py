@@ -1,8 +1,8 @@
-from typing import TypedDict, Literal
-from langgraph.graph import StateGraph, START, END
+from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_anthropic import ChatAnthropic
 from pydantic import BaseModel, Field
+from graph.state import CreativeState
 import os
 from dotenv import load_dotenv
 
@@ -26,15 +26,6 @@ class ContinuityResult(BaseModel):
     explanation: str = Field(
         description="Brief explanation of why the concept is consistent or has drifted"
     )
-
-
-# --- Shared state schema ---
-class CreativeState(TypedDict):
-    concept: str
-    feedback: str
-    verdict: str
-    original_brief: str
-    continuity_status: str
 
 
 # --- Model ---

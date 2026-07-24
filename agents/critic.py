@@ -5,12 +5,13 @@ orchestration graph can decide whether to keep iterating or converge.
 """
 
 import os
-from typing import Literal, TypedDict
+from typing import Literal
 
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, Field
+from graph.state import CreativeState
 
 load_dotenv()
 
@@ -28,15 +29,6 @@ class CritiqueResult(BaseModel):
         description="Whether the concept is ready to move forward or needs revision"
     )
     feedback: str = Field(description="Specific, actionable feedback for the author")
-
-
-# --- State schema ---
-class CreativeState(TypedDict):
-    concept: str
-    feedback: str
-    verdict: str
-    original_brief: str
-    continuity_status: str
 
 
 def get_critic_model():
