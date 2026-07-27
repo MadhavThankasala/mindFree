@@ -4,6 +4,7 @@ from agents.continuitiy_checker import continuity_node
 from agents.image_prompter import image_prompter_node
 from graph.state import CreativeState
 from langgraph.graph import StateGraph, START, END
+from langgraph.checkpoint.memory import MemorySaver
 
 # --- Build the graph ---
 graph = StateGraph(CreativeState)
@@ -30,6 +31,7 @@ def route_after_critic(state: CreativeState) -> str:
         return "ideator"
     if state["verdict"] == "accept":
         return "image_prompter"
+    # if human override feedback was provided, loop back to ideator
     return "ideator"
 
 graph.add_conditional_edges("critic", route_after_critic, {
@@ -39,23 +41,26 @@ graph.add_conditional_edges("critic", route_after_critic, {
 
 graph.add_edge("image_prompter", END)
 
-# --- Compile ---
-pipeline = graph.compile()
+# --- Compile with memory checkpointer for human-in-the-loop ---
+memory = MemorySaver()
+pipeline = graph.compile(checkpointer=memory, interrupt_after=["critic"])
 
-# --- Run ---
+# --- Compile without interrupt for terminal use ---
+pipeline_auto = graph.compile()
+
+# --- Run (terminal) ---
 if __name__ == "__main__":
     import base64
 
     user_input = input("Enter a creative brief: ")
 
-    # Optionally accept an image path
     image_path = input("Enter path to a reference image (or press Enter to skip): ").strip()
     image_data = ""
     if image_path:
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode("utf-8")
 
-    result = pipeline.invoke({
+    result = pipeline_auto.invoke({
         "concept": user_input,
         "original_brief": user_input,
         "feedback": "",
