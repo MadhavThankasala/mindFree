@@ -11,6 +11,111 @@ load_dotenv()
 
 st.set_page_config(page_title="mindFree", page_icon="🧠", layout="wide")
 
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
+
+html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
+[data-testid="stAppViewContainer"] {
+    background: radial-gradient(circle at 15% 0%, rgba(167,139,250,0.12), transparent 45%),
+                radial-gradient(circle at 85% 15%, rgba(236,72,153,0.08), transparent 40%),
+                #0d0d15;
+}
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stSidebar"] {
+    background: #12121b;
+    border-right: 1px solid rgba(255,255,255,0.06);
+}
+
+.mf-hero { padding: 0.5rem 0 1.25rem 0; }
+.mf-hero h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 2.4rem;
+    font-weight: 700;
+    margin: 0;
+    background: linear-gradient(90deg, #a78bfa 0%, #ec4899 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.mf-hero p {
+    color: #9a9ab0;
+    font-size: 0.95rem;
+    margin: 0.3rem 0 0 0;
+}
+.mf-tags { margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.mf-tag {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 0.22rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(167,139,250,0.12);
+    border: 1px solid rgba(167,139,250,0.35);
+    color: #c9bcf9;
+}
+
+.mf-badge {
+    display: inline-block;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.03em;
+    padding: 0.3rem 0.9rem;
+    border-radius: 999px;
+}
+.mf-badge-consistent { background: rgba(52,211,153,0.12); border: 1px solid rgba(52,211,153,0.4); color: #6ee7b7; }
+.mf-badge-drifted { background: rgba(248,113,113,0.12); border: 1px solid rgba(248,113,113,0.4); color: #fca5a5; }
+
+[data-testid="stVerticalBlockBorderWrapper"] {
+    border-radius: 16px !important;
+    border-color: rgba(255,255,255,0.08) !important;
+    background: rgba(255,255,255,0.02);
+}
+
+.stButton > button {
+    border-radius: 999px;
+    font-weight: 600;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(167,139,250,0.25);
+}
+.stButton > button[kind="primary"] {
+    background: linear-gradient(90deg, #a78bfa, #ec4899);
+    border: none;
+}
+
+.stTextArea textarea, .stTextInput input {
+    border-radius: 12px !important;
+    background: rgba(255,255,255,0.03) !important;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+}
+
+[data-testid="stFileUploaderDropzone"] {
+    border-radius: 12px;
+    border: 1px dashed rgba(167,139,250,0.35) !important;
+    background: rgba(167,139,250,0.03);
+}
+
+[data-testid="stExpander"] {
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.08) !important;
+    overflow: hidden;
+}
+
+[data-testid="stAlert"] {
+    border-radius: 12px;
+    background: rgba(167,139,250,0.08);
+    border: 1px solid rgba(167,139,250,0.25);
+}
+
+hr { border-color: rgba(255,255,255,0.08) !important; }
+</style>
+""", unsafe_allow_html=True)
+
 # ─── Session state defaults ────────────────────────────────────────────────────
 for key, default in {
     "brief": "",
@@ -74,29 +179,39 @@ with st.sidebar:
 
 
 # ─── Main UI ───────────────────────────────────────────────────────────────────
-st.title("🧠 mindFree")
-st.caption("Multi-agent creative collaboration powered by LangGraph + Claude")
-st.divider()
+st.markdown("""
+<div class="mf-hero">
+    <h1>🧠 mindFree</h1>
+    <p>Multi-agent creative collaboration powered by LangGraph + Claude</p>
+    <div class="mf-tags">
+        <span class="mf-tag">IDEATOR</span>
+        <span class="mf-tag">CONTINUITY CHECKER</span>
+        <span class="mf-tag">CRITIC</span>
+        <span class="mf-tag">IMAGE PROMPTER</span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-col1, col2 = st.columns([3, 1])
-with col1:
-    st.markdown("**Creative Brief**")
-with col2:
-    if st.button("✨ Generate for me"):
-        with st.spinner("Generating brief..."):
-            st.session_state["brief"] = generate_brief()
-        st.rerun()
+with st.container(border=True):
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("**Creative Brief**")
+    with col2:
+        if st.button("✨ Generate for me"):
+            with st.spinner("Generating brief..."):
+                st.session_state["brief"] = generate_brief()
+            st.rerun()
 
-brief = st.text_area(
-    "Creative Brief",
-    value=st.session_state["brief"],
-    placeholder="e.g. a short film about loneliness in a crowded city",
-    height=100,
-    label_visibility="collapsed"
-)
+    brief = st.text_area(
+        "Creative Brief",
+        value=st.session_state["brief"],
+        placeholder="e.g. a short film about loneliness in a crowded city",
+        height=100,
+        label_visibility="collapsed"
+    )
 
-image_file = st.file_uploader("Reference Image (optional)", type=["jpg", "jpeg", "png"])
-run = st.button("Generate", type="primary", disabled=not brief.strip() or st.session_state["awaiting_human"])
+    image_file = st.file_uploader("Reference Image (optional)", type=["jpg", "jpeg", "png"])
+    run = st.button("Generate", type="primary", disabled=not brief.strip() or st.session_state["awaiting_human"])
 
 # ─── Initial pipeline run ──────────────────────────────────────────────────────
 if run:
@@ -152,9 +267,11 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
     result = st.session_state["current_result"]
     st.divider()
     st.subheader("🔍 Critic paused — your review needed")
-    st.write(f"**Current concept:** {result['concept']}")
-    st.write(f"**Critic verdict:** `{result['verdict']}`")
-    st.write(f"**Critic feedback:** {result['feedback']}")
+    review = st.container(border=True)
+    with review:
+        st.write(f"**Current concept:** {result['concept']}")
+        st.write(f"**Critic verdict:** `{result['verdict']}`")
+        st.write(f"**Critic feedback:** {result['feedback']}")
 
     col_a, col_b = st.columns(2)
     with col_a:
@@ -211,26 +328,30 @@ if st.session_state["current_result"] and not st.session_state["awaiting_human"]
     st.divider()
     st.caption(f"✅ Completed in {result['iteration']} iteration(s)")
 
-    st.subheader("💡 Final Concept")
-    st.write(result["concept"])
+    with st.container(border=True):
+        st.subheader("💡 Final Concept")
+        st.write(result["concept"])
 
-    st.subheader("🎨 Generated Image")
-    with st.spinner("Generating image..."):
-        image_url = generate_image(result["image_prompt"])
-    if image_url:
-        st.image(image_url, use_container_width=True)
-    else:
-        st.info("Add OPENAI_API_KEY to your .env to generate images.")
-        st.markdown("**Image prompt to paste into Midjourney or DALL-E:**")
-        st.code(result["image_prompt"], language=None)
+        st.subheader("🎨 Generated Image")
+        with st.spinner("Generating image..."):
+            image_url = generate_image(result["image_prompt"])
+        if image_url:
+            st.image(image_url, use_container_width=True)
+        else:
+            st.info("Add OPENAI_API_KEY to your .env to generate images.")
+            st.markdown("**Image prompt to paste into Midjourney or DALL-E:**")
+            st.code(result["image_prompt"], language=None)
 
-    with st.expander("🔍 Critic Feedback"):
-        st.write(result["feedback"])
+        with st.expander("🔍 Critic Feedback"):
+            st.write(result["feedback"])
 
-    with st.expander("🔗 Continuity Status"):
-        status = result["continuity_status"]
-        colour = "green" if status == "consistent" else "red"
-        st.markdown(f":{colour}[**{status.upper()}**]")
+        with st.expander("🔗 Continuity Status"):
+            status = result["continuity_status"]
+            badge_class = "mf-badge-consistent" if status == "consistent" else "mf-badge-drifted"
+            st.markdown(
+                f'<span class="mf-badge {badge_class}">{status.upper()}</span>',
+                unsafe_allow_html=True
+            )
 
     st.divider()
     st.caption("Made with mindFree · LangGraph + Claude")
