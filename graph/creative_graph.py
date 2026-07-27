@@ -20,10 +20,15 @@ graph.add_edge("ideator", "continuity")
 graph.add_edge("continuity", "critic")
 
 # --- Conditional routing after critic ---
-# "accept" or max 3 iterations → image_prompter → END
-# "revise" → loop back to ideator
+# max 3 iterations → image_prompter → END (hard stop, avoids infinite loops)
+# "drifted" continuity → loop back to ideator, regardless of critic verdict
+# otherwise: "accept" → image_prompter, "revise" → loop back to ideator
 def route_after_critic(state: CreativeState) -> str:
-    if state["verdict"] == "accept" or state["iteration"] >= 3:
+    if state["iteration"] >= 3:
+        return "image_prompter"
+    if state["continuity_status"] == "drifted":
+        return "ideator"
+    if state["verdict"] == "accept":
         return "image_prompter"
     return "ideator"
 
@@ -56,6 +61,7 @@ if __name__ == "__main__":
         "feedback": "",
         "verdict": "",
         "continuity_status": "",
+        "continuity_feedback": "",
         "iteration": 0,
         "image_input": image_data,
         "image_prompt": ""

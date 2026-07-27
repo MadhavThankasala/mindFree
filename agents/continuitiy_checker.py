@@ -45,4 +45,4 @@ def continuity_node(state: CreativeState) -> CreativeState:
         SystemMessage(content=CONTINUITY_SYSTEM_PROMPT),
         HumanMessage(content=prompt)
     ])
-    return {**state, "continuity_status": result.status, "feedback": result.explanation}
+    return {**state, "continuity_status": result.status, "continuity_feedback": result.explanation}
