@@ -113,6 +113,30 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 }
 
 hr { border-color: rgba(255,255,255,0.08) !important; }
+
+.mf-stepper { display: flex; align-items: flex-start; margin: 0.75rem 0; }
+.mf-step {
+    display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+    flex: 1; position: relative; opacity: 0.35; transition: opacity 0.2s ease;
+}
+.mf-step:not(:last-child)::after {
+    content: ""; position: absolute; top: 18px; left: 55%; width: 90%; height: 2px;
+    background: rgba(255,255,255,0.1); z-index: 0;
+}
+.mf-step-icon {
+    width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center;
+    justify-content: center; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1); font-size: 1.1rem; z-index: 1;
+}
+.mf-step-label { font-size: 0.7rem; font-weight: 600; color: #9a9ab0; text-align: center; }
+.mf-step-active { opacity: 1; }
+.mf-step-active .mf-step-icon {
+    background: linear-gradient(135deg, #a78bfa, #ec4899); border-color: transparent;
+    box-shadow: 0 0 0 4px rgba(167,139,250,0.15);
+}
+.mf-step-active .mf-step-label { color: #eef0f5; }
+.mf-step-done { opacity: 0.7; }
+.mf-step-done .mf-step-icon { background: rgba(52,211,153,0.15); border-color: rgba(52,211,153,0.4); }
 </style>
 """, unsafe_allow_html=True)
 
@@ -123,6 +147,7 @@ for key, default in {
     "thread_id": str(uuid.uuid4()),
     "awaiting_human": False,
     "current_result": None,
+    "image_url": None,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -164,6 +189,52 @@ AGENT_LABELS = {
     "critic":        ("🔍", "Critic",              "Reviewing concept..."),
     "image_prompter":("🎨", "Image Prompter",      "Building image prompt..."),
 }
+
+PIPELINE_STEPS = ["ideator", "continuity", "critic", "image_prompter"]
+
+
+def render_stepper(container, current_node: str) -> None:
+    """Render a horizontal step indicator, highlighting the active/completed stages."""
+    idx = PIPELINE_STEPS.index(current_node) if current_node in PIPELINE_STEPS else -1
+    parts = []
+    for i, node in enumerate(PIPELINE_STEPS):
+        icon, label, _ = AGENT_LABELS[node]
+        if i < idx:
+            css_class = "mf-step mf-step-done"
+        elif i == idx:
+            css_class = "mf-step mf-step-active"
+        else:
+            css_class = "mf-step"
+        parts.append(
+            f'<div class="{css_class}">'
+            f'<span class="mf-step-icon">{icon}</span>'
+            f'<span class="mf-step-label">{label}</span>'
+            f'</div>'
+        )
+    container.markdown(f'<div class="mf-stepper">{"".join(parts)}</div>', unsafe_allow_html=True)
+
+
+def build_session_export(result: dict) -> str:
+    return f"""# mindFree Session Export
+
+## Original Brief
+{result['original_brief']}
+
+## Final Concept
+{result['concept']}
+
+## Critic Feedback
+{result['feedback']}
+
+## Continuity Status
+{result['continuity_status'].upper()}
+
+## Image Prompt
+{result['image_prompt']}
+
+## Iterations
+{result['iteration']}
+"""
 
 
 # ─── Sidebar — history ─────────────────────────────────────────────────────────
@@ -240,8 +311,7 @@ if run:
     for event in pipeline.stream(initial_state, config(), stream_mode="updates"):
         for node_name in event:
             if node_name in AGENT_LABELS:
-                icon, label, message = AGENT_LABELS[node_name]
-                status_box.info(f"{icon} **{label}** — {message}")
+                render_stepper(status_box, node_name)
 
     status_box.empty()
 
@@ -260,6 +330,7 @@ if run:
             "continuity_status": result["continuity_status"]
         })
         st.session_state["current_result"] = result
+        st.session_state["image_url"] = None
         st.rerun()
 
 # ─── Human-in-the-loop review ─────────────────────────────────────────────────
@@ -269,6 +340,12 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
     st.subheader("🔍 Critic paused — your review needed")
     review = st.container(border=True)
     with review:
+        if result["continuity_status"] == "drifted":
+            st.warning(
+                "⚠️ **Continuity check flagged this concept as drifted** from the "
+                "original brief. Review carefully before accepting — the system "
+                "will not block you, this is just a heads-up."
+            )
         st.write(f"**Current concept:** {result['concept']}")
         st.write(f"**Critic verdict:** `{result['verdict']}`")
         st.write(f"**Critic feedback:** {result['feedback']}")
@@ -282,8 +359,7 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
             for event in pipeline.stream(None, config(), stream_mode="updates"):
                 for node_name in event:
                     if node_name in AGENT_LABELS:
-                        icon, label, message = AGENT_LABELS[node_name]
-                        status_box.info(f"{icon} **{label}** — {message}")
+                        render_stepper(status_box, node_name)
             status_box.empty()
             final = pipeline.get_state(config()).values
             st.session_state["history"].append({
@@ -294,6 +370,7 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
             })
             st.session_state["awaiting_human"] = False
             st.session_state["current_result"] = final
+            st.session_state["image_url"] = None
             st.rerun()
 
     with col_b:
@@ -304,8 +381,7 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
             for event in pipeline.stream(None, config(), stream_mode="updates"):
                 for node_name in event:
                     if node_name in AGENT_LABELS:
-                        icon, label, message = AGENT_LABELS[node_name]
-                        status_box.info(f"{icon} **{label}** — {message}")
+                        render_stepper(status_box, node_name)
             status_box.empty()
             state_snapshot = pipeline.get_state(config())
             if state_snapshot.next:
@@ -320,6 +396,7 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
                 })
                 st.session_state["awaiting_human"] = False
                 st.session_state["current_result"] = final
+                st.session_state["image_url"] = None
             st.rerun()
 
 # ─── Final results ─────────────────────────────────────────────────────────────
@@ -329,14 +406,32 @@ if st.session_state["current_result"] and not st.session_state["awaiting_human"]
     st.caption(f"✅ Completed in {result['iteration']} iteration(s)")
 
     with st.container(border=True):
+        col_export, _ = st.columns([1, 3])
+        with col_export:
+            st.download_button(
+                "⬇️ Export session",
+                data=build_session_export(result),
+                file_name="mindfree_session.md",
+                mime="text/markdown",
+            )
+
         st.subheader("💡 Final Concept")
         st.write(result["concept"])
 
         st.subheader("🎨 Generated Image")
-        with st.spinner("Generating image..."):
-            image_url = generate_image(result["image_prompt"])
+        # Only auto-generate once per result; regenerate only on explicit request
+        # (avoids re-billing DALL-E on every unrelated rerun, e.g. expanding a section).
+        if st.session_state["image_url"] is None:
+            with st.spinner("Generating image..."):
+                st.session_state["image_url"] = generate_image(result["image_prompt"]) or ""
+        image_url = st.session_state["image_url"]
+
         if image_url:
             st.image(image_url, use_container_width=True)
+            if st.button("🔁 Regenerate image"):
+                with st.spinner("Generating a new image..."):
+                    st.session_state["image_url"] = generate_image(result["image_prompt"]) or ""
+                st.rerun()
         else:
             st.info("Add OPENAI_API_KEY to your .env to generate images.")
             st.markdown("**Image prompt to paste into Midjourney or DALL-E:**")
