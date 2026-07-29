@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 from graph.creative_graph import pipeline
+from agents.continuitiy_checker import validate_brief
 
 load_dotenv()
 
@@ -286,6 +287,13 @@ with st.container(border=True):
 
 # ─── Initial pipeline run ──────────────────────────────────────────────────────
 if run:
+    # --- Validate brief before running pipeline ---
+    with st.spinner("Checking your brief..."):
+        validation = validate_brief(brief)
+    if not validation.valid:
+        st.error(f"**Your brief has an issue:** {validation.reason}")
+        st.stop()
+
     # Reset thread for a fresh run
     st.session_state["thread_id"] = str(uuid.uuid4())
     st.session_state["awaiting_human"] = False

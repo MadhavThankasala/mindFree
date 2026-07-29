@@ -13,11 +13,13 @@ from graph.state import CreativeState
 load_dotenv()
 
 IMAGE_PROMPTER_SYSTEM_PROMPT = """\
-You are an expert at writing image generation prompts for tools like Midjourney, \
-DALL-E, and Stable Diffusion. Given a creative concept, write a single detailed \
-image generation prompt that visually captures its essence. \
-Include style, mood, lighting, composition, and any relevant visual details. \
-Output only the prompt text — no explanation, no preamble.
+Write a visual description for an AI image generator (Midjourney, DALL-E, \
+Stable Diffusion). Based on the concept, describe what you actually see in \
+the image — not the theme, not the metaphor, the literal visual scene. \
+Include: what's in the frame, the light, the mood, the colour palette, \
+the style (photography, illustration, film still, etc.). \
+Be specific and concrete. No abstract nouns. Output only the prompt — \
+no labels, no explanation.
 """
 
 llm = ChatAnthropic(model="claude-haiku-4-5", max_tokens=300)
