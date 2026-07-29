@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 from graph.creative_graph import pipeline
+from graph.state import make_initial_state, CREATIVE_MODES
+from agents.continuitiy_checker import validate_brief
 
 load_dotenv()
 
@@ -42,17 +44,6 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
     color: #9a9ab0;
     font-size: 0.95rem;
     margin: 0.3rem 0 0 0;
-}
-.mf-tags { margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
-.mf-tag {
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    padding: 0.22rem 0.65rem;
-    border-radius: 999px;
-    background: rgba(167,139,250,0.12);
-    border: 1px solid rgba(167,139,250,0.35);
-    color: #c9bcf9;
 }
 
 .mf-badge {
@@ -137,6 +128,24 @@ hr { border-color: rgba(255,255,255,0.08) !important; }
 .mf-step-active .mf-step-label { color: #eef0f5; }
 .mf-step-done { opacity: 0.7; }
 .mf-step-done .mf-step-icon { background: rgba(52,211,153,0.15); border-color: rgba(52,211,153,0.4); }
+
+/* Version history diff view */
+.mf-version {
+    border-left: 2px solid rgba(167,139,250,0.3);
+    padding: 0.5rem 0 0.5rem 0.85rem;
+    margin-bottom: 0.75rem;
+    color: #c9bcf9;
+    font-size: 0.875rem;
+    line-height: 1.6;
+}
+.mf-version-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #9a9ab0;
+    margin-bottom: 0.25rem;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -148,15 +157,17 @@ for key, default in {
     "awaiting_human": False,
     "current_result": None,
     "image_url": None,
+    "selected_mode": "general",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
-def generate_brief() -> str:
+def generate_brief(mode: str) -> str:
+    mode_hint = "" if mode == "general" else f" It should be appropriate for a {mode}."
     llm = ChatAnthropic(model="claude-haiku-4-5", max_tokens=100)
     response = llm.invoke([HumanMessage(content=
-        "Generate a single short creative brief in one sentence. "
+        f"Generate a single short creative brief in one sentence.{mode_hint} "
         "Be imaginative and specific. Output only the brief, no preamble."
     )])
     return response.content
@@ -184,17 +195,17 @@ def config():
 
 
 AGENT_LABELS = {
-    "ideator":       ("✍️", "Ideator",            "Generating creative concept..."),
-    "continuity":    ("🔗", "Continuity Checker",  "Checking brief alignment..."),
-    "critic":        ("🔍", "Critic",              "Reviewing concept..."),
-    "image_prompter":("🎨", "Image Prompter",      "Building image prompt..."),
+    "ideator":       ("✍️", "Writing",     "Developing your concept..."),
+    "continuity":    ("🔗", "Checking",    "Making sure it stays on track..."),
+    "critic":        ("🔍", "Reviewing",   "Being honest with you..."),
+    "formatter":     ("📄", "Shaping",     "Giving it structure..."),
+    "image_prompter":("🎨", "Visualising", "Building the image prompt..."),
 }
 
-PIPELINE_STEPS = ["ideator", "continuity", "critic", "image_prompter"]
+PIPELINE_STEPS = ["ideator", "continuity", "critic", "formatter", "image_prompter"]
 
 
 def render_stepper(container, current_node: str) -> None:
-    """Render a horizontal step indicator, highlighting the active/completed stages."""
     idx = PIPELINE_STEPS.index(current_node) if current_node in PIPELINE_STEPS else -1
     parts = []
     for i, node in enumerate(PIPELINE_STEPS):
@@ -215,36 +226,47 @@ def render_stepper(container, current_node: str) -> None:
 
 
 def build_session_export(result: dict) -> str:
+    mode = result.get("mode", "general")
+    history_section = ""
+    history = result.get("concept_history", [])
+    if len(history) > 1:
+        history_section = "\n\n## Revision History\n"
+        for i, v in enumerate(history[:-1], 1):
+            history_section += f"\n### Draft {i}\n{v}\n"
+
     return f"""# mindFree Session Export
+Mode: {mode.title()}
 
 ## Original Brief
 {result['original_brief']}
 
-## Final Concept
+## Final Output
 {result['concept']}
 
 ## Critic Feedback
 {result['feedback']}
 
 ## Continuity Status
-{result['continuity_status'].upper()}
+{result['continuity_status'].upper() if result['continuity_status'] else 'N/A'}
 
 ## Image Prompt
 {result['image_prompt']}
 
 ## Iterations
-{result['iteration']}
+{result['iteration']}{history_section}
 """
 
 
 # ─── Sidebar — history ─────────────────────────────────────────────────────────
 with st.sidebar:
-    st.header("🕘 Session History")
+    st.header("Session History")
     if not st.session_state["history"]:
         st.caption("No runs yet.")
     for i, item in enumerate(reversed(st.session_state["history"])):
-        with st.expander(f"Run {len(st.session_state['history']) - i}: {item['brief'][:40]}..."):
-            st.markdown(f"**Concept:** {item['concept'][:200]}...")
+        label = f"{item['brief'][:35]}…" if len(item['brief']) > 35 else item['brief']
+        with st.expander(f"Run {len(st.session_state['history']) - i} · {label}"):
+            st.markdown(f"**Mode:** {item.get('mode', 'general').title()}")
+            st.markdown(f"**Concept:** {item['concept'][:200]}…")
             st.markdown(f"**Iterations:** {item['iterations']}")
             st.markdown(f"**Continuity:** {item['continuity_status']}")
 
@@ -253,40 +275,63 @@ with st.sidebar:
 st.markdown("""
 <div class="mf-hero">
     <h1>🧠 mindFree</h1>
-    <p>Multi-agent creative collaboration powered by LangGraph + Claude</p>
-    <div class="mf-tags">
-        <span class="mf-tag">IDEATOR</span>
-        <span class="mf-tag">CONTINUITY CHECKER</span>
-        <span class="mf-tag">CRITIC</span>
-        <span class="mf-tag">IMAGE PROMPTER</span>
-    </div>
+    <p>Describe your idea — rough is fine. We'll develop it with you.</p>
 </div>
 """, unsafe_allow_html=True)
 
 with st.container(border=True):
+    # Mode selector
+    mode_labels = {
+        "general":       "✦ General",
+        "short film":    "🎬 Short Film",
+        "short story":   "📖 Short Story",
+        "startup pitch": "🚀 Startup Pitch",
+        "song":          "🎵 Song",
+    }
+    mode_cols = st.columns(len(CREATIVE_MODES))
+    for col, m in zip(mode_cols, CREATIVE_MODES):
+        is_active = st.session_state["selected_mode"] == m
+        if col.button(
+            mode_labels[m],
+            key=f"mode_{m}",
+            type="primary" if is_active else "secondary",
+            use_container_width=True,
+        ):
+            st.session_state["selected_mode"] = m
+            st.rerun()
+
+    selected_mode = st.session_state["selected_mode"]
+
+    st.markdown("---")
+
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("**Creative Brief**")
+        st.markdown("**Your brief**")
     with col2:
-        if st.button("✨ Generate for me"):
-            with st.spinner("Generating brief..."):
-                st.session_state["brief"] = generate_brief()
+        if st.button("✨ Surprise me"):
+            with st.spinner("Coming up with something..."):
+                st.session_state["brief"] = generate_brief(selected_mode)
             st.rerun()
 
     brief = st.text_area(
-        "Creative Brief",
+        "Brief",
         value=st.session_state["brief"],
         placeholder="e.g. a short film about loneliness in a crowded city",
         height=100,
         label_visibility="collapsed"
     )
 
-    image_file = st.file_uploader("Reference Image (optional)", type=["jpg", "jpeg", "png"])
-    run = st.button("Generate", type="primary", disabled=not brief.strip() or st.session_state["awaiting_human"])
+    image_file = st.file_uploader("Reference image (optional)", type=["jpg", "jpeg", "png"])
+    run = st.button("Develop →", type="primary", disabled=not brief.strip() or st.session_state["awaiting_human"])
 
 # ─── Initial pipeline run ──────────────────────────────────────────────────────
 if run:
-    # Reset thread for a fresh run
+    with st.spinner("Checking your brief..."):
+        validation = validate_brief(brief)
+    if not validation.valid:
+        st.error(f"**Your brief has an issue:** {validation.reason}")
+        st.stop()
+
     st.session_state["thread_id"] = str(uuid.uuid4())
     st.session_state["awaiting_human"] = False
     st.session_state["current_result"] = None
@@ -295,18 +340,8 @@ if run:
     if image_file:
         image_data = base64.b64encode(image_file.read()).decode("utf-8")
 
-    initial_state = {
-        "concept": brief,
-        "original_brief": brief,
-        "feedback": "",
-        "verdict": "",
-        "continuity_status": "",
-        "iteration": 0,
-        "image_input": image_data,
-        "image_prompt": ""
-    }
+    initial_state = make_initial_state(brief, image_data, selected_mode)
 
-    # --- Live agent status via streaming ---
     status_box = st.empty()
     for event in pipeline.stream(initial_state, config(), stream_mode="updates"):
         for node_name in event:
@@ -315,7 +350,6 @@ if run:
 
     status_box.empty()
 
-    # Check if graph paused at critic (human-in-the-loop interrupt)
     state_snapshot = pipeline.get_state(config())
     if state_snapshot.next:
         st.session_state["awaiting_human"] = True
@@ -327,7 +361,8 @@ if run:
             "brief": brief,
             "concept": result["concept"],
             "iterations": result["iteration"],
-            "continuity_status": result["continuity_status"]
+            "continuity_status": result["continuity_status"],
+            "mode": result.get("mode", "general"),
         })
         st.session_state["current_result"] = result
         st.session_state["image_url"] = None
@@ -337,23 +372,25 @@ if run:
 if st.session_state["awaiting_human"] and st.session_state["current_result"]:
     result = st.session_state["current_result"]
     st.divider()
-    st.subheader("🔍 Critic paused — your review needed")
-    review = st.container(border=True)
-    with review:
+
+    with st.container(border=True):
+        st.markdown("#### Here's where we landed")
+
         if result["continuity_status"] == "drifted":
             st.warning(
-                "⚠️ **Continuity check flagged this concept as drifted** from the "
-                "original brief. Review carefully before accepting — the system "
-                "will not block you, this is just a heads-up."
+                "⚠️ The concept has drifted from your original brief — "
+                "worth a look before moving forward."
             )
-        st.write(f"**Current concept:** {result['concept']}")
-        st.write(f"**Critic verdict:** `{result['verdict']}`")
-        st.write(f"**Critic feedback:** {result['feedback']}")
+
+        st.write(result["concept"])
+        st.caption(f"Iteration {result['iteration']}")
+
+        st.markdown("---")
+        st.markdown(f"**Honest take:** {result['feedback']}")
 
     col_a, col_b = st.columns(2)
     with col_a:
-        if st.button("✅ Accept & continue", type="primary"):
-            # Override verdict to accept and resume
+        if st.button("✅ This works — keep going", type="primary"):
             pipeline.update_state(config(), {"verdict": "accept"})
             status_box = st.empty()
             for event in pipeline.stream(None, config(), stream_mode="updates"):
@@ -366,7 +403,8 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
                 "brief": final["original_brief"],
                 "concept": final["concept"],
                 "iterations": final["iteration"],
-                "continuity_status": final["continuity_status"]
+                "continuity_status": final["continuity_status"],
+                "mode": final.get("mode", "general"),
             })
             st.session_state["awaiting_human"] = False
             st.session_state["current_result"] = final
@@ -374,8 +412,11 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
             st.rerun()
 
     with col_b:
-        human_feedback = st.text_input("Or give your own feedback and revise:")
-        if st.button("🔄 Revise with my feedback") and human_feedback:
+        human_feedback = st.text_input(
+            "What would you change?",
+            placeholder="e.g. make it darker, add a second character, cut the ending"
+        )
+        if st.button("🔄 Revise it") and human_feedback:
             pipeline.update_state(config(), {"feedback": human_feedback, "verdict": "revise"})
             status_box = st.empty()
             for event in pipeline.stream(None, config(), stream_mode="updates"):
@@ -392,7 +433,8 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
                     "brief": final["original_brief"],
                     "concept": final["concept"],
                     "iterations": final["iteration"],
-                    "continuity_status": final["continuity_status"]
+                    "continuity_status": final["continuity_status"],
+                    "mode": final.get("mode", "general"),
                 })
                 st.session_state["awaiting_human"] = False
                 st.session_state["current_result"] = final
@@ -403,24 +445,35 @@ if st.session_state["awaiting_human"] and st.session_state["current_result"]:
 if st.session_state["current_result"] and not st.session_state["awaiting_human"]:
     result = st.session_state["current_result"]
     st.divider()
-    st.caption(f"✅ Completed in {result['iteration']} iteration(s)")
+    st.caption(f"✅ Done · {result['iteration']} pass{'es' if result['iteration'] != 1 else ''}")
 
     with st.container(border=True):
         col_export, _ = st.columns([1, 3])
         with col_export:
             st.download_button(
-                "⬇️ Export session",
+                "⬇️ Export",
                 data=build_session_export(result),
                 file_name="mindfree_session.md",
                 mime="text/markdown",
             )
 
-        st.subheader("💡 Final Concept")
+        st.subheader("Your concept")
         st.write(result["concept"])
 
-        st.subheader("🎨 Generated Image")
-        # Only auto-generate once per result; regenerate only on explicit request
-        # (avoids re-billing DALL-E on every unrelated rerun, e.g. expanding a section).
+        # ── Revision history ──────────────────────────────────────────────────
+        history = result.get("concept_history", [])
+        if len(history) > 1:
+            with st.expander(f"📝 See how it evolved ({len(history)} drafts)"):
+                for i, draft in enumerate(history[:-1], 1):
+                    st.markdown(
+                        f'<div class="mf-version">'
+                        f'<div class="mf-version-label">Draft {i}</div>'
+                        f'{draft}'
+                        f'</div>',
+                        unsafe_allow_html=True,
+                    )
+
+        st.subheader("Generated Image")
         if st.session_state["image_url"] is None:
             with st.spinner("Generating image..."):
                 st.session_state["image_url"] = generate_image(result["image_prompt"]) or ""
@@ -434,19 +487,21 @@ if st.session_state["current_result"] and not st.session_state["awaiting_human"]
                 st.rerun()
         else:
             st.info("Add OPENAI_API_KEY to your .env to generate images.")
-            st.markdown("**Image prompt to paste into Midjourney or DALL-E:**")
+            st.markdown("**Paste this into Midjourney or DALL-E:**")
             st.code(result["image_prompt"], language=None)
 
-        with st.expander("🔍 Critic Feedback"):
+        with st.expander("🔍 What the critic said"):
             st.write(result["feedback"])
 
-        with st.expander("🔗 Continuity Status"):
-            status = result["continuity_status"]
+        with st.expander("🔗 Brief alignment"):
+            status = result["continuity_status"] or "n/a"
             badge_class = "mf-badge-consistent" if status == "consistent" else "mf-badge-drifted"
             st.markdown(
                 f'<span class="mf-badge {badge_class}">{status.upper()}</span>',
-                unsafe_allow_html=True
+                unsafe_allow_html=True,
             )
+            if result.get("continuity_feedback"):
+                st.caption(result["continuity_feedback"])
 
     st.divider()
     st.caption("Made with mindFree · LangGraph + Claude")
