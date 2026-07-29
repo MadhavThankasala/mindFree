@@ -2,6 +2,7 @@ from agents.ideator import return_ideas
 from agents.critic import critic_node
 from agents.continuitiy_checker import continuity_node
 from agents.image_prompter import image_prompter_node
+from agents.formatter import formatter_node
 from graph.state import CreativeState
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
@@ -13,6 +14,7 @@ graph = StateGraph(CreativeState)
 graph.add_node("ideator", return_ideas)
 graph.add_node("continuity", continuity_node)
 graph.add_node("critic", critic_node)
+graph.add_node("formatter", formatter_node)
 graph.add_node("image_prompter", image_prompter_node)
 
 # --- Linear edges: START → ideator → continuity → critic ---
@@ -21,36 +23,38 @@ graph.add_edge("ideator", "continuity")
 graph.add_edge("continuity", "critic")
 
 # --- Conditional routing after critic ---
-# max 3 iterations → image_prompter → END (hard stop, avoids infinite loops)
-# "drifted" continuity → loop back to ideator, regardless of critic verdict
-# otherwise: "accept" → image_prompter, "revise" → loop back to ideator
+# "accept" or max 3 iterations → formatter → image_prompter → END
+# drift + revise = stronger signal to loop back
 def route_after_critic(state: CreativeState) -> str:
-    if state["iteration"] >= 3:
-        return "image_prompter"
-    if state["continuity_status"] == "drifted":
-        return "ideator"
     if state["verdict"] == "accept":
-        return "image_prompter"
-    # if human override feedback was provided, loop back to ideator
-    return "ideator"
+        return "formatter"
+    if state["iteration"] >= 3:
+        return "formatter"
+    if state["continuity_status"] == "drifted" and state["verdict"] == "revise":
+        return "ideator"
+    if state["verdict"] == "revise":
+        return "ideator"
+    return "formatter"
 
 graph.add_conditional_edges("critic", route_after_critic, {
-    "image_prompter": "image_prompter",
-    "ideator": "ideator"
+    "formatter": "formatter",
+    "ideator": "ideator",
 })
 
+graph.add_edge("formatter", "image_prompter")
 graph.add_edge("image_prompter", END)
 
 # --- Compile with memory checkpointer for human-in-the-loop ---
 memory = MemorySaver()
 pipeline = graph.compile(checkpointer=memory, interrupt_after=["critic"])
 
-# --- Compile without interrupt for terminal use ---
+# --- Compile without interrupt for terminal / test use ---
 pipeline_auto = graph.compile()
 
 # --- Run (terminal) ---
 if __name__ == "__main__":
     import base64
+    from graph.state import make_initial_state
 
     user_input = input("Enter a creative brief: ")
 
@@ -60,17 +64,7 @@ if __name__ == "__main__":
         with open(image_path, "rb") as f:
             image_data = base64.b64encode(f.read()).decode("utf-8")
 
-    result = pipeline_auto.invoke({
-        "concept": user_input,
-        "original_brief": user_input,
-        "feedback": "",
-        "verdict": "",
-        "continuity_status": "",
-        "continuity_feedback": "",
-        "iteration": 0,
-        "image_input": image_data,
-        "image_prompt": ""
-    })
+    result = pipeline_auto.invoke(make_initial_state(user_input, image_data))
 
     print("\n--- Final Concept ---")
     print(result["concept"])

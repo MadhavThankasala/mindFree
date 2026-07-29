@@ -71,6 +71,16 @@ def return_ideas(state: CreativeState) -> CreativeState:
 
     response = llm.invoke([
         SystemMessage(content=IDEATOR_SYSTEM_PROMPT),
-        HumanMessage(content=content)
+        HumanMessage(content=content),
     ])
-    return {**state, "concept": response.content, "iteration": state["iteration"] + 1}
+
+    new_concept = response.content
+    history = list(state.get("concept_history", []))
+    history.append(new_concept)
+
+    return {
+        **state,
+        "concept": new_concept,
+        "iteration": state["iteration"] + 1,
+        "concept_history": history,
+    }
