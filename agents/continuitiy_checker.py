@@ -1,12 +1,8 @@
 from typing import Literal
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_anthropic import ChatAnthropic
 from pydantic import BaseModel, Field
 from graph.state import CreativeState
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
+from agents.llm_client import get_llm, get_structured_llm
 
 # --- Brief validation ---
 
@@ -37,11 +33,9 @@ class BriefValidationResult(BaseModel):
 
 def validate_brief(brief: str) -> BriefValidationResult:
     """Call this before running the pipeline to catch bad briefs early."""
-    model = ChatAnthropic(model="claude-haiku-4-5", max_tokens=256)
-    structured = model.with_structured_output(BriefValidationResult)
-    return structured.invoke([
+    return get_structured_llm(BriefValidationResult, max_tokens=256).invoke([
         SystemMessage(content=BRIEF_VALIDATION_PROMPT),
-        HumanMessage(content=brief)
+        HumanMessage(content=brief),
     ])
 
 
@@ -64,21 +58,16 @@ class ContinuityResult(BaseModel):
     )
 
 
-# --- Model ---
-def get_continuity_model():
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key or api_key == "your_anthropic_api_key_here":
-        raise EnvironmentError("ANTHROPIC_API_KEY is not set in your .env file")
-    model = ChatAnthropic(model="claude-haiku-4-5", max_tokens=256)
-    return model.with_structured_output(ContinuityResult)
-
-
 # --- Node function ---
 def continuity_node(state: CreativeState) -> CreativeState:
-    model = get_continuity_model()
+    # Skip on the first pass — the concept IS the brief at iteration 0
+    if state["iteration"] == 0:
+        return {**state, "continuity_status": "consistent", "continuity_feedback": ""}
+
+    model = get_structured_llm(ContinuityResult, max_tokens=256)
     prompt = f"Original brief: {state['original_brief']}\n\nCurrent concept: {state['concept']}"
     result: ContinuityResult = model.invoke([
         SystemMessage(content=CONTINUITY_SYSTEM_PROMPT),
-        HumanMessage(content=prompt)
+        HumanMessage(content=prompt),
     ])
     return {**state, "continuity_status": result.status, "continuity_feedback": result.explanation}

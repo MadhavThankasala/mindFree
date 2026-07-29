@@ -1,101 +1,99 @@
-# Multi-Agent Creative Collaboration Tool
+# mindFree
 
-A multi-agent creative collaboration system built with LangGraph and Python, enabling AI agents to work together on creative tasks.
+A multi-agent creative development tool. You give it a rough idea; it develops, critiques, shapes, and visualises it — and checks in with you when it needs a call.
 
-## Project Structure
+Built with [LangGraph](https://github.com/langchain-ai/langgraph) and Claude.
+
+---
+
+## What it does
+
+You type a brief — as rough as "a short film about loneliness in a crowded city". mindFree runs a pipeline of agents that:
+
+1. **Ideator** — turns your brief into a fleshed-out concept, in plain human language
+2. **Continuity Checker** — makes sure the concept hasn't drifted from what you asked for
+3. **Critic** — gives honest, direct feedback and decides whether it's ready or needs another pass
+4. **Formatter** — shapes the accepted concept into a proper artifact (film treatment, story sketch, startup pitch, song outline, etc.)
+5. **Image Prompter** — writes a detailed visual prompt for Midjourney, DALL-E, or Stable Diffusion
+
+The pipeline loops (up to 3 times) until the critic accepts. The web UI pauses after the critic step so you can review and redirect before it continues.
+
+## Creative Modes
+
+Pick a mode before you run — it shapes how every agent thinks and what it produces:
+
+| Mode | Output |
+|------|--------|
+| General | Titled concept, plain prose |
+| Short Film | Logline + setup / turn / resolution |
+| Short Story | Opening paragraph + story arc |
+| Startup Pitch | Problem / insight / product / why now |
+| Song | Mood + theme + verse direction + hook |
+
+---
+
+## Setup
+
+```bash
+# 1. Clone and enter the project
+cd mindFree
+
+# 2. Activate the virtual environment
+source venv/bin/activate
+
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Add your API keys
+cp .env.example .env
+# Edit .env — ANTHROPIC_API_KEY is required; OPENAI_API_KEY enables DALL-E image generation
+```
+
+## Running
+
+**Web UI (recommended):**
+```bash
+streamlit run app.py
+```
+
+**CLI:**
+```bash
+python main.py
+```
+
+## Project structure
 
 ```
 mindFree/
-├── agents/          # Individual agent implementations
-├── graph/           # LangGraph workflow and graph definitions
-├── tests/           # Test suite
-├── venv/            # Python virtual environment (not in git)
-├── .env             # Environment variables (not in git)
-├── .env.example     # Template for environment variables
-├── .gitignore       # Git ignore rules
-├── requirements.txt # Python dependencies
-└── README.md        # This file
+├── agents/
+│   ├── llm_client.py          # Centralised LLM factory
+│   ├── ideator.py             # Develops the concept
+│   ├── continuitiy_checker.py # Brief alignment check + brief validation
+│   ├── critic.py              # Honest feedback + accept/revise verdict
+│   ├── formatter.py           # Shapes concept into mode-appropriate artifact
+│   └── image_prompter.py      # Generates visual prompt (reference-image-aware)
+├── graph/
+│   ├── state.py               # CreativeState schema + make_initial_state()
+│   └── creative_graph.py      # LangGraph pipeline definition
+├── tests/
+│   └── test_pipeline.py       # Unit tests (no API calls, all mocked)
+├── app.py                     # Streamlit web UI
+├── main.py                    # CLI entry point
+└── requirements.txt
 ```
 
-## Setup Instructions
-
-### 1. Clone and Navigate to Project
-
-```bash
-cd /Users/madhavthankasala/julyProject/mindFree
-```
-
-### 2. Create Virtual Environment
-
-The virtual environment has already been created. To activate it:
-
-```bash
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-Dependencies are already installed. If you need to reinstall:
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment Variables
-
-Copy the example environment file and add your API keys:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your API keys:
-- `ANTHROPIC_API_KEY`: Your Anthropic API key (required)
-- `LANGCHAIN_API_KEY`: Your LangSmith API key (optional, for tracing)
-
-### 5. Verify Installation
-
-Check that all packages are installed correctly:
-
-```bash
-python -c "import langgraph, langchain, langchain_anthropic; print('All packages imported successfully!')"
-```
-
-## Dependencies
-
-- **langgraph** (>=0.2.0): Framework for building multi-agent workflows
-- **langchain** (>=0.3.0): LLM application framework
-- **langchain-anthropic** (>=0.2.0): Anthropic integration for LangChain
-- **python-dotenv** (>=1.0.0): Environment variable management
-- **langchain-core** (>=0.3.0): Core LangChain functionality
-- **langsmith** (>=0.1.0): Tracing and monitoring (optional)
-
-## Next Steps
-
-1. **Define Agent Types**: Create agent classes in the `agents/` directory
-2. **Build Graph Structure**: Define the workflow graph in the `graph/` directory
-3. **Implement State Management**: Set up state schemas for agent communication
-4. **Add Tests**: Write unit and integration tests in the `tests/` directory
-5. **Create Entry Point**: Build a main script to run the multi-agent system
-
-## Development
-
-### Running Tests
+## Running tests
 
 ```bash
 pytest tests/
 ```
 
-### Deactivating Virtual Environment
+All tests are mocked — no API calls, no keys needed.
 
-```bash
-deactivate
-```
+## Dependencies
 
-## License
-
-[Add your license here]
-
-## Contributing
-
-[Add contribution guidelines here]
+- `langgraph` — pipeline orchestration with human-in-the-loop support
+- `langchain-anthropic` — Claude integration
+- `streamlit` — web UI
+- `openai` — DALL-E image generation (optional)
+- `python-dotenv` — environment variable management
