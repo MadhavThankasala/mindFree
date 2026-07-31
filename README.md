@@ -1,14 +1,14 @@
-# mindFree
+# Draft Room
 
 A multi-agent creative development tool. You give it a rough idea; it develops, critiques, shapes, and visualises it — and checks in with you when it needs a call.
 
-Built with [LangGraph](https://github.com/langchain-ai/langgraph) and Claude.
+Built with [LangGraph](https://github.com/langchain-ai/langgraph) and IBM Bob.
 
 ---
 
 ## What it does
 
-You type a brief — as rough as "a short film about loneliness in a crowded city". mindFree runs a pipeline of agents that:
+You type a brief — as rough as "a short film about loneliness in a crowded city". Draft Room runs a pipeline of agents that:
 
 1. **Ideator** — turns your brief into a fleshed-out concept, in plain human language
 2. **Continuity Checker** — makes sure the concept hasn't drifted from what you asked for
@@ -36,7 +36,7 @@ Pick a mode before you run — it shapes how every agent thinks and what it prod
 
 ```bash
 # 1. Clone and enter the project
-cd mindFree
+cd DraftRoom
 
 # 2. Activate the virtual environment
 source venv/bin/activate
@@ -64,7 +64,7 @@ python main.py
 ## Project structure
 
 ```
-mindFree/
+Draft Room/
 ├── agents/
 │   ├── llm_client.py          # Centralised LLM factory
 │   ├── ideator.py             # Develops the concept
